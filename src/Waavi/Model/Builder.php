@@ -25,7 +25,7 @@ class Builder extends \Illuminate\Database\Eloquent\Builder {
 		$relationType = str_replace('Illuminate\\Database\\Eloquent\\Relations\\', '', get_class($relation));
 		switch($relationType) {
 			default:
-				return $relation->getParent()->getTable().' '.$relation->getRelated()->getTable().' '.$relationType;
+				return $this;
 			case 'BelongsTo':
 				$parentTable = $relation->getParent()->getTable();
 				$relatedTable = $relation->getRelated()->getTable();
@@ -35,6 +35,9 @@ class Builder extends \Illuminate\Database\Eloquent\Builder {
 					->join($relatedTable, "$relatedTable.id", '=', "$parentTable.$fk")
 					->where("$relatedTable.$column", $operator, $value)
 					->lists('id');
+				if (empty($ids)) {
+					return $this->whereNull('id');
+				}
 				return $this->whereIn('id', $ids);
 		}
 	}
