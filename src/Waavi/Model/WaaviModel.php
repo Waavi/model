@@ -1,6 +1,9 @@
 <?php namespace Waavi\Model;
 
 use Illuminate\Support\MessageBag;
+use Illuminate\Database\Eloquent\Model as Eloquent;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Input;
 
 class WaaviModel extends Eloquent {
 
