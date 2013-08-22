@@ -36,10 +36,15 @@ class Builder extends \Illuminate\Database\Eloquent\Builder {
 					->where("$relatedTable.$column", $operator, $value)
 					->lists('id');
 				if (empty($ids)) {
-					return $this->whereNull('id');
+					return $this->whereNull('id', $boolean);
 				}
-				return $this->whereIn('id', $ids);
+				return $this->whereIn('id', $ids, $boolean);
 		}
+	}
+
+	public function orWhereRelated($model, $column, $operator = null, $value = null)
+	{
+		return $this->whereRelated($model, $column, $operator, $value, 'or');
 	}
 
 }
