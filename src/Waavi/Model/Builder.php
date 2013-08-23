@@ -7,20 +7,6 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 class Builder extends EloquentBuilder {
 
 	/**
-	 *	whereRelated query.
-	 *
-	 *	@var Illuminate\Database\Query
-	 */
-	protected $relatedQuery;
-
-	/**
-	 *	whereNotRelated query.
-	 *
-	 *	@var Illuminate\Database\Query
-	 */
-	protected $notRelatedQuery;
-
-	/**
 	 * Adds a whereIn, whereNotIn or whereNull $primaryKey clause to the query.
 	 * This clause is built by querying which entries in the table have a relationship with the specified key
 	 * that satisfies the constraint.
