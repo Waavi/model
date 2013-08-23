@@ -6,8 +6,18 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
 class Builder extends EloquentBuilder {
 
+	/**
+	 *	whereRelated query.
+	 *
+	 *	@var Illuminate\Database\Query
+	 */
 	protected $relatedQuery;
 
+	/**
+	 *	whereNotRelated query.
+	 *
+	 *	@var Illuminate\Database\Query
+	 */
 	protected $notRelatedQuery;
 
 	/**
@@ -20,7 +30,7 @@ class Builder extends EloquentBuilder {
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
-	 * @return \Illuminate\Database\Query\Builder|static
+	 * @return \Waavi\Model\Builder
 	 * @throws \Waavi\Model\BadMethodCallException
 	 * @throws \Waavi\Model\InvalidModelRelationException
 	 */
@@ -64,6 +74,13 @@ class Builder extends EloquentBuilder {
 		return $not ? $this->whereNotIn('id', $ids, $boolean) : $this->whereIn('id', $ids, $boolean);
 	}
 
+	/**
+	 *	Adds a join clause to the current relatedQuery using the relation Object.
+	 *
+	 *	@param \Illuminate\Database\Query 											$query
+	 *	@param \Illuminate\Database\Eloquent\Relations\Relation $relation
+	 *	@return \Illuminate\Database\Querys
+	 */
 	protected function joinRelated($query, $relation)
 	{
 		$parentTable 	= $relation->getParent()->getTable();
@@ -100,7 +117,7 @@ class Builder extends EloquentBuilder {
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
-	 * @return \Illuminate\Database\Query\Builder|static
+	 * @return \Waavi\Model\Builder
 	 */
 	public function orWhereRelated($relationshipKey, $column = null, $operator = null, $value = null)
 	{
@@ -115,7 +132,7 @@ class Builder extends EloquentBuilder {
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
-	 * @return \Illuminate\Database\Query\Builder|static
+	 * @return \Waavi\Model\Builder
 	 */
 	public function whereNotRelated($relationshipKey, $column = null, $operator = null, $value = null, $boolean = 'and')
 	{
@@ -130,7 +147,7 @@ class Builder extends EloquentBuilder {
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
-	 * @return \Illuminate\Database\Query\Builder|static
+	 * @return \Waavi\Model\Builder
 	 */
 	public function orWhereNotRelated($relationshipKey, $column = null, $operator = null, $value = null)
 	{
@@ -138,48 +155,11 @@ class Builder extends EloquentBuilder {
 	}
 
 	/**
-	 * Initializes the database query that will look for the ids of related tuples.
-	 *
-	 * @param  string  $relationshipKey
-	 * @param  Illuminate\Database\Eloquent\Relations\Relation  $relation
-	 * @return Illuminate\Database\Query\Builder
-	 */
-	protected function initRelatedQuery($relationshipKey)
-	{
-		$relation = $this->getRelation($relationshipKey);
-
-		$parentTable 	= $relation->getParent()->getTable();
-		$relatedTable = $relation->getRelated()->getTable();
-		$fk 					= $relation->getForeignKey();
-		$relationType = str_replace('Illuminate\\Database\\Eloquent\\Relations\\', '', get_class($relation));
-
-		$query = DB::table($parentTable)->select("$parentTable.id");
-
-		switch($relationType) {
-			default:
-				return $this;
-			case 'BelongsTo':
-				$query->join($relatedTable, "$relatedTable.id", '=', "$parentTable.$fk");
-				break;
-			case 'HasOne': case 'HasMany': case 'MorphOne': case 'MorphMany':
-				$query->join($relatedTable, "$parentTable.id", '=', "$fk");
-				break;
-			case 'BelongsToMany':
-				$table = $relation->getTable();
-				$otherKey = $relation->getOtherKey();
-				$query->join($table, "$parentTable.id", '=', "$fk")->join($relatedTable, "$relatedTable.id", '=', "$otherKey");
-				break;
-		}
-
-		return $query;
-	}
-
-	/**
 	 * Add a nested where statement to the query.
 	 *
 	 * @param  \Closure $callback
 	 * @param  string   $boolean
-	 * @return \Illuminate\Database\Query\Builder|static
+	 * @return \Waavi\Model\Builder
 	 */
 	public function whereRelatedNested(Closure $callback, $boolean = 'and')
 	{
