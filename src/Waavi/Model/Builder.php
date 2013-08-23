@@ -8,27 +8,55 @@ class Builder extends EloquentBuilder {
 
 	protected $relatedQuery;
 
+	protected $notRelatedQuery;
+
 	/**
-	 * Filters the result set by querying related models. Allows for closures, but not deep nested relationships.
-	 * Every call to this function triggers a database query, which is then translated into a whereIn.
+	 * Adds a whereIn, whereNotIn or whereNull $primaryKey clause to the query.
+	 * This clause is built by querying which entries in the table have a relationship with the specified key
+	 * that satisfies the constraint.
 	 *
-	 * This means this will not work if there are more than 10 000 models that satisfy the restriction.
-	 *
-	 * @param  string  $model
+	 * @param  string  $relationshipKey The key used to define the relationship in the model.
 	 * @param  string  $column
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
 	 * @return \Illuminate\Database\Query\Builder|static
+	 * @throws \Waavi\Model\BadMethodCallException
+	 * @throws \Waavi\Model\InvalidModelRelationException
 	 */
-	public function whereRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and', $not = false)
+	public function whereRelated($relationshipKey, $column = null, $operator = null, $value = null, $boolean = 'and', $not = false)
 	{
-		if (is_callable($model)) {
-			return $this->whereRelatedNested($model, $boolean);
+		if (is_callable($relationshipKey)) {
+			return $this->whereRelatedNested($relationshipKey, $boolean);
 		}
 
-		$relatedTable = $this->getRelation($model)->getRelated()->getTable();
-		$ids = $this->initRelatedQuery($model)->where("$relatedTable.$column", $operator, $value)->lists('id');
+		$relationshipKeys = explode('.', $relationshipKey);
+
+		if ( ! count($relationshipKeys) ) {
+			throw new InvalidModelRelationException($relationshipKey);
+		}
+
+		$parentModel  = $this->model;
+		$parentTable 	= $parentModel->getTable();
+		$parentKey 		= $parentModel->getKeyName();
+
+		// Initialize the relatedQuery if it hasn't been done already:
+		$relatedQuery = DB::table($parentTable)->select("$parentTable.$parentKey");
+
+		// Join with related tables:
+		foreach($relationshipKeys as $relationshipKey) {
+			$relation 			= $parentModel->$relationshipKey();
+			$relatedQuery 	= $this->joinRelated($relatedQuery, $relation);
+			$parentModel 		= $relation->getRelated();
+		}
+
+		$relatedTable = $parentModel->getTable();
+
+		// Apply where condition:
+		$relatedQuery->where("$relatedTable.$column", $operator, $value);
+
+		// List ids and, and translate the query to a whereIn. This should only be done once.
+		$ids = $relatedQuery->lists('id');
 
 		if (empty($ids)) {
 			return $not ? $this : $this->whereNull('id', $boolean);
@@ -36,61 +64,89 @@ class Builder extends EloquentBuilder {
 		return $not ? $this->whereNotIn('id', $ids, $boolean) : $this->whereIn('id', $ids, $boolean);
 	}
 
+	protected function joinRelated($query, $relation)
+	{
+		$parentTable 	= $relation->getParent()->getTable();
+		$parentKey		= $relation->getParent()->getKeyName();
+		$relatedTable = $relation->getRelated()->getTable();
+		$fk 					= $relation->getForeignKey();
+		$relationType = str_replace('Illuminate\\Database\\Eloquent\\Relations\\', '', get_class($relation));
+
+		switch($relationType) {
+			case 'BelongsTo':
+				$query->join($relatedTable, "$relatedTable.$parentKey", '=', "$parentTable.$fk");
+				break;
+			case 'HasOne': case 'HasMany': case 'MorphOne': case 'MorphMany':
+				$query->join($relatedTable, "$parentTable.$parentKey", '=', "$fk");
+				break;
+			case 'BelongsToMany':
+				$table = $relation->getTable();
+				$otherKey = $relation->getOtherKey();
+				$query->join($table, "$parentTable.$parentKey", '=', "$fk")
+					->join($relatedTable, "$relatedTable.$parentKey", '=', "$otherKey");
+				break;
+			default:
+				break;
+		}
+
+		return $query;
+	}
+
 	/**
 	 * Same as whereRelated but with boolean OR applied.
 	 *
-	 * @param  string  $model
+	 * @param  string  $relationshipKey
 	 * @param  string  $column
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
 	 * @return \Illuminate\Database\Query\Builder|static
 	 */
-	public function orWhereRelated($model, $column = null, $operator = null, $value = null)
+	public function orWhereRelated($relationshipKey, $column = null, $operator = null, $value = null)
 	{
-		return $this->whereRelated($model, $column, $operator, $value, 'or');
+		return $this->whereRelated($relationshipKey, $column, $operator, $value, 'or');
 	}
 
 	/**
 	 * Same as whereRelated but when trying to find records that are NOT related.
 	 *
-	 * @param  string  $model
+	 * @param  string  $relationshipKey
 	 * @param  string  $column
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
 	 * @return \Illuminate\Database\Query\Builder|static
 	 */
-	public function whereNotRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and')
+	public function whereNotRelated($relationshipKey, $column = null, $operator = null, $value = null, $boolean = 'and')
 	{
-		return $this->whereRelated($model, $column, $operator, $value, $boolean, true);
+		return $this->whereRelated($relationshipKey, $column, $operator, $value, $boolean, true);
 	}
 
 	/**
 	 * Same as whereNotRelated but with boolean OR applied.
 	 *
-	 * @param  string  $model
+	 * @param  string  $relationshipKey
 	 * @param  string  $column
 	 * @param  string  $operator
 	 * @param  mixed   $value
 	 * @param  string  $boolean
 	 * @return \Illuminate\Database\Query\Builder|static
 	 */
-	public function orWhereNotRelated($model, $column = null, $operator = null, $value = null)
+	public function orWhereNotRelated($relationshipKey, $column = null, $operator = null, $value = null)
 	{
-		return $this->whereNotRelated($model, $column, $operator, $value, 'or');
+		return $this->whereNotRelated($relationshipKey, $column, $operator, $value, 'or');
 	}
 
 	/**
 	 * Initializes the database query that will look for the ids of related tuples.
 	 *
-	 * @param  string  $model
+	 * @param  string  $relationshipKey
 	 * @param  Illuminate\Database\Eloquent\Relations\Relation  $relation
 	 * @return Illuminate\Database\Query\Builder
 	 */
-	protected function initRelatedQuery($model)
+	protected function initRelatedQuery($relationshipKey)
 	{
-		$relation = $this->getRelation($model);
+		$relation = $this->getRelation($relationshipKey);
 
 		$parentTable 	= $relation->getParent()->getTable();
 		$relatedTable = $relation->getRelated()->getTable();
