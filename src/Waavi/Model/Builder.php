@@ -52,12 +52,12 @@ class Builder extends EloquentBuilder {
 		$relatedQuery->where("$relatedTable.$column", $operator, $value);
 
 		// List ids and, and translate the query to a whereIn. This should only be done once.
-		$ids = $relatedQuery->lists('id');
+		$pks = $relatedQuery->lists($parentKey);
 
-		if (empty($ids)) {
-			return $not ? $this : $this->whereNull('id', $boolean);
+		if (empty($pks)) {
+			return $not ? $this : $this->whereNull($parentKey, $boolean);
 		}
-		return $not ? $this->whereNotIn('id', $ids, $boolean) : $this->whereIn('id', $ids, $boolean);
+		return $not ? $this->whereNotIn($parentKey, $pks, $boolean) : $this->whereIn($parentKey, $pks, $boolean);
 	}
 
 	/**
