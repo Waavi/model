@@ -6,13 +6,13 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
 class Builder extends EloquentBuilder {
 
+	protected $relatedQuery;
+
 	/**
-	 * Filters the result set by querying related models. This is a very limited method, as it only works when the
-	 * parent model belongs to the related model and issues a database query everytime to retrieve a list of ids
-	 * that it then translates to a whereIn call. It also doesn't allow for closures.
+	 * Filters the result set by querying related models. Allows for closures, but not deep nested relationships.
+	 * Every call to this function triggers a database query, which is then translated into a whereIn.
 	 *
-	 * This means this will not work if there are more than 10 000 models that satisfy the restriction, or if the
-	 * model doesn't belong to the related model.
+	 * This means this will not work if there are more than 10 000 models that satisfy the restriction.
 	 *
 	 * @param  string  $model
 	 * @param  string  $column
@@ -23,35 +23,109 @@ class Builder extends EloquentBuilder {
 	 */
 	public function whereRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and')
 	{
-		if (is_callable($model))
-		{
+		if (is_callable($model)) {
 			return $this->whereRelatedNested($model, $boolean);
 		}
 
 		$relation = $this->getRelation($model);
+		$relatedTable = $relation->getRelated()->getTable();
+		$ids = $this->initRelatedQuery($model, $relation)->where("$relatedTable.$column", $operator, $value)->lists('id');
+
+		if (empty($ids)) {
+			return $this->whereNull('id', $boolean);
+		}
+		return $this->whereIn('id', $ids, $boolean);
+	}
+
+	/**
+	 * Same as whereRelated but with boolean OR applied.
+	 *
+	 * @param  string  $model
+	 * @param  string  $column
+	 * @param  string  $operator
+	 * @param  mixed   $value
+	 * @param  string  $boolean
+	 * @return \Illuminate\Database\Query\Builder|static
+	 */
+	public function orWhereRelated($model, $column = null, $operator = null, $value = null)
+	{
+		return $this->whereRelated($model, $column, $operator, $value, 'or');
+	}
+
+	/**
+	 * Same as whereRelated but when trying to find records that are NOT related.
+	 *
+	 * @param  string  $model
+	 * @param  string  $column
+	 * @param  string  $operator
+	 * @param  mixed   $value
+	 * @param  string  $boolean
+	 * @return \Illuminate\Database\Query\Builder|static
+	 */
+	public function whereNotRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and')
+	{
+		if (is_callable($model)) {
+			return $this->whereRelatedNested($model, $boolean);
+		}
+
+		$relation = $this->getRelation($model);
+		$relatedTable = $relation->getRelated()->getTable();
+		$ids = $this->initRelatedQuery($model, $relation)->where("$relatedTable.$column", $operator, $value)->lists('id');
+
+		if (empty($ids)) {
+			return $this;
+		}
+		return $this->whereNotIn('id', $ids, $boolean);
+	}
+
+	/**
+	 * Same as whereNotRelated but with boolean OR applied.
+	 *
+	 * @param  string  $model
+	 * @param  string  $column
+	 * @param  string  $operator
+	 * @param  mixed   $value
+	 * @param  string  $boolean
+	 * @return \Illuminate\Database\Query\Builder|static
+	 */
+	public function orWhereNotRelated($model, $column = null, $operator = null, $value = null)
+	{
+		return $this->whereNotRelated($model, $column, $operator, $value, 'or');
+	}
+
+	/**
+	 * Initializes the database query that will look for the ids of related tuples.
+	 *
+	 * @param  string  $model
+	 * @param  Illuminate\Database\Eloquent\Relations\Relation  $relation
+	 * @return Illuminate\Database\Query\Builder
+	 */
+	protected function initRelatedQuery($model, $relation)
+	{
+		$parentTable 	= $relation->getParent()->getTable();
+		$relatedTable = $relation->getRelated()->getTable();
+		$fk 					= $relation->getForeignKey();
 		$relationType = str_replace('Illuminate\\Database\\Eloquent\\Relations\\', '', get_class($relation));
+
+		$query = DB::table($parentTable)->select("$parentTable.id");
+
 		switch($relationType) {
 			default:
 				return $this;
 			case 'BelongsTo':
-				$parentTable = $relation->getParent()->getTable();
-				$relatedTable = $relation->getRelated()->getTable();
-				$fk = $relation->getForeignKey();
-				$ids = DB::table($parentTable)
-					->select("$parentTable.id")
-					->join($relatedTable, "$relatedTable.id", '=', "$parentTable.$fk")
-					->where("$relatedTable.$column", $operator, $value)
-					->lists('id');
-				if (empty($ids)) {
-					return $this->whereNull('id', $boolean);
-				}
-				return $this->whereIn('id', $ids, $boolean);
+				$query->join($relatedTable, "$relatedTable.id", '=', "$parentTable.$fk");
+				break;
+			case 'HasOne': case 'HasMany': case 'MorphOne': case 'MorphMany':
+				$query->join($relatedTable, "$parentTable.id", '=', "$fk");
+				break;
+			case 'BelongsToMany':
+				$table = $relation->getTable();
+				$otherKey = $relation->getOtherKey();
+				$query->join($table, "$parentTable.id", '=', "$fk")->join($relatedTable, "$relatedTable.id", '=', "$otherKey");
+				break;
 		}
-	}
 
-	public function orWhereRelated($model, $column = null, $operator = null, $value = null)
-	{
-		return $this->whereRelated($model, $column, $operator, $value, 'or');
+		return $query;
 	}
 
 	/**
