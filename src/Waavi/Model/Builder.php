@@ -21,20 +21,19 @@ class Builder extends EloquentBuilder {
 	 * @param  string  $boolean
 	 * @return \Illuminate\Database\Query\Builder|static
 	 */
-	public function whereRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and')
+	public function whereRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and', $not = false)
 	{
 		if (is_callable($model)) {
 			return $this->whereRelatedNested($model, $boolean);
 		}
 
-		$relation = $this->getRelation($model);
-		$relatedTable = $relation->getRelated()->getTable();
-		$ids = $this->initRelatedQuery($model, $relation)->where("$relatedTable.$column", $operator, $value)->lists('id');
+		$relatedTable = $this->getRelation($model)->getRelated()->getTable();
+		$ids = $this->initRelatedQuery($model)->where("$relatedTable.$column", $operator, $value)->lists('id');
 
 		if (empty($ids)) {
-			return $this->whereNull('id', $boolean);
+			return $not ? $this : $this->whereNull('id', $boolean);
 		}
-		return $this->whereIn('id', $ids, $boolean);
+		return $not ? $this->whereNotIn('id', $ids, $boolean) : $this->whereIn('id', $ids, $boolean);
 	}
 
 	/**
@@ -64,18 +63,7 @@ class Builder extends EloquentBuilder {
 	 */
 	public function whereNotRelated($model, $column = null, $operator = null, $value = null, $boolean = 'and')
 	{
-		if (is_callable($model)) {
-			return $this->whereRelatedNested($model, $boolean);
-		}
-
-		$relation = $this->getRelation($model);
-		$relatedTable = $relation->getRelated()->getTable();
-		$ids = $this->initRelatedQuery($model, $relation)->where("$relatedTable.$column", $operator, $value)->lists('id');
-
-		if (empty($ids)) {
-			return $this;
-		}
-		return $this->whereNotIn('id', $ids, $boolean);
+		return $this->whereRelated($model, $column, $operator, $value, $boolean, true);
 	}
 
 	/**
@@ -100,8 +88,10 @@ class Builder extends EloquentBuilder {
 	 * @param  Illuminate\Database\Eloquent\Relations\Relation  $relation
 	 * @return Illuminate\Database\Query\Builder
 	 */
-	protected function initRelatedQuery($model, $relation)
+	protected function initRelatedQuery($model)
 	{
+		$relation = $this->getRelation($model);
+
 		$parentTable 	= $relation->getParent()->getTable();
 		$relatedTable = $relation->getRelated()->getTable();
 		$fk 					= $relation->getForeignKey();
