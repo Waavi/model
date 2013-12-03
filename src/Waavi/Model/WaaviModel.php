@@ -121,9 +121,7 @@ class WaaviModel extends Eloquent {
 	 */
 	public function save(array $options = array())
 	{
-		// If the model is not valid, flash input:
 		if ( ! $this->isValid() ) {
-			Input::flash();
 			return false;
 		}
 		return parent::save($options);
