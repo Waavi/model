@@ -1,5 +1,6 @@
 {
     "name": "waavi/model",
+    "version": "1.0",
     "description": "Eloquent models with auto validation on save and update.",
     "authors": [
         {
