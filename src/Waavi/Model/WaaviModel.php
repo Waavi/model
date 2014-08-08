@@ -4,8 +4,11 @@ use Illuminate\Support\MessageBag;
 use Illuminate\Database\Eloquent\Model as Eloquent;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Input;
+use Illuminate\Database\Eloquent\SoftDeletingTrait;
 
 class WaaviModel extends Eloquent {
+
+	use SoftDeletingTrait;
 
 	/**
    * The validation rules.
